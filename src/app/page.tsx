@@ -45,13 +45,15 @@ export default async function Home() {
                             Commitly를 통해 관리되고 있는 프로젝트 목록입니다.
                         </p>
                     </div>
-                    <Link
-                        href="/projects/new"
-                        className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
-                    >
-                        <Plus className="h-4 w-4" />
-                        새 프로젝트 생성
-                    </Link>
+                    {role === 'client' && (
+                        <Link
+                            href="/projects/new"
+                            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
+                        >
+                            <Plus className="h-4 w-4" />
+                            새 프로젝트 생성
+                        </Link>
+                    )}
                 </div>
 
                 <ProjectInvitesClient invites={pendingInvites} />
@@ -62,14 +64,20 @@ export default async function Home() {
                             <FolderKanban className="h-8 w-8 text-muted-foreground/60" />
                         </div>
                         <h3 className="text-lg font-bold text-foreground mb-2">프로젝트가 없습니다</h3>
-                        <p className="text-sm text-muted-foreground mb-6">첫 번째 프로젝트를 생성하고 범위를 설정해 보세요.</p>
-                        <Link
-                            href="/projects/new"
-                            className="inline-flex items-center gap-2 bg-foreground text-background px-4 py-2 rounded-lg text-sm font-medium hover:bg-foreground/90 transition-colors"
-                        >
-                            <Plus className="h-4 w-4" />
-                            생성하기
-                        </Link>
+                        <p className="text-sm text-muted-foreground mb-6">
+                            {role === 'client' 
+                                ? '첫 번째 프로젝트를 생성하고 범위를 설정해 보세요.' 
+                                : '아직 참여 중인 프로젝트가 없습니다. 초대를 기다려 주세요.'}
+                        </p>
+                        {role === 'client' && (
+                            <Link
+                                href="/projects/new"
+                                className="inline-flex items-center gap-2 bg-foreground text-background px-4 py-2 rounded-lg text-sm font-medium hover:bg-foreground/90 transition-colors"
+                            >
+                                <Plus className="h-4 w-4" />
+                                생성하기
+                            </Link>
+                        )}
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

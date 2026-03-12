@@ -9,10 +9,40 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
 
     const project = await prisma.project.findUnique({
         where: { id },
-        include: { features: true }
+        include: { 
+            features: true,
+            updates: {
+                where: { clientSummary: { not: null } },
+                orderBy: { createdAt: 'desc' },
+                take: 1
+            }
+        }
     });
 
     if (!project) notFound();
+
+    const features = project.features || [];
+    const totalFeatures = features.length;
+    const completedFeatures = features.filter((f) => f.status === 'done').length;
+    const completionRate = totalFeatures > 0 ? Math.round((completedFeatures / totalFeatures) * 100) : 0;
+
+    const endDate = project.endDate ? new Date(project.endDate) : new Date();
+    const today = new Date();
+    const remainingDays = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+    const dDayText = project.endDate ? (remainingDays >= 0 ? `D-${remainingDays}` : `D+${Math.abs(remainingDays)}`) : "진행중";
+
+    const recentDoneFeatures = features
+        .filter(f => f.status === 'done')
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 2);
+
+    const nextTargets = features
+        .filter(f => f.status !== 'done')
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .slice(0, 2);
+
+    const latestAiSummary = project.updates[0]?.clientSummary || 
+        "이번 주는 프로젝트 작업이 순항하고 있습니다. 특별한 이슈나 지연 사항이 없습니다. 개발팀이 열심히 화면 및 서버 연동 작업을 진행 중입니다!";
 
     if (project.features.length === 0) {
         return (
@@ -87,25 +117,26 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
                             <FileText className="w-6 h-6 text-primary" /> 핵심 요약 (Executive Summary)
                         </h3>
                         <span className="px-4 py-1.5 bg-blue-500/10 text-blue-600 border border-blue-500/20 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
-                            ☀️ 쾌청함 (순항 중)
+                            {completionRate >= 50 ? "☀️ 쾌청함 (순항 중)" : "⛅ 보통 (진행 중)"}
                         </span>
                     </div>
-                    <p className="leading-loose text-lg text-foreground/80 font-medium relative z-10">
-                        이번 주 프로젝트는 <strong>목표 대비 112%의 속도</strong>로 걱정 없이 원활하게 진행되고 있습니다. <br /><br />
-                        가장 큰 성과는 보안성이 강화된 '신규 로그인/회원가입' 기능이 서버에 무사히 배포된 것입니다. 기존의 복잡했던 코드들이 깔끔하게 정리되어, 다음 주에 예정된 '결제 모듈 연결' 작업은 훨씬 더 빠르고 안정적으로 진행될 예정입니다. 대표님의 신속한 디자인 승인이 일정 단축에 큰 도움이 되었습니다! 🎉
+                    <p className="leading-loose text-lg text-foreground/80 font-medium relative z-10 whitespace-pre-wrap">
+                        {latestAiSummary}
                     </p>
                 </div>
 
                 <div className="space-y-6">
                     <div className="bg-background/80 backdrop-blur-xl border border-border/50 rounded-[2rem] p-8 shadow-sm flex flex-col justify-center">
-                        <p className="text-sm font-bold text-muted-foreground mb-2 flex items-center gap-2"><Target className="w-4 h-4" /> 주간 목표 달성률</p>
-                        <h4 className="text-5xl font-black text-primary">100%</h4>
-                        <p className="text-xs text-muted-foreground mt-3 font-medium">계획된 12개 태스크 모두 완료</p>
+                        <p className="text-sm font-bold text-muted-foreground mb-2 flex items-center gap-2"><Target className="w-4 h-4" /> 전체 목표 달성률</p>
+                        <h4 className="text-5xl font-black text-primary">{completionRate}%</h4>
+                        <p className="text-xs text-muted-foreground mt-3 font-medium">전체 {totalFeatures}개 중 {completedFeatures}개 완료</p>
                     </div>
                     <div className="bg-background/80 backdrop-blur-xl border border-border/50 rounded-[2rem] p-8 shadow-sm flex flex-col justify-center">
                         <p className="text-sm font-bold text-muted-foreground mb-2 flex items-center gap-2"><Zap className="w-4 h-4" /> 남은 개발 기간</p>
-                        <h4 className="text-4xl font-black text-foreground">D-42</h4>
-                        <p className="text-xs text-muted-foreground mt-3 font-medium">예상 일정과 정확히 일치함</p>
+                        <h4 className="text-4xl font-black text-foreground">{dDayText}</h4>
+                        <p className="text-xs text-muted-foreground mt-3 font-medium">
+                            {completionRate === 100 ? "프로젝트가 성공적으로 완료되었습니다." : "예상 일정과 목표에 맞춰 달리고 있습니다."}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -116,18 +147,22 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
                 <div className="bg-background/60 backdrop-blur-2xl border border-border/50 rounded-[2rem] p-8 lg:p-10 shadow-sm">
                     <h3 className="text-2xl font-bold flex items-center gap-3 mb-8">
                         <div className="p-2 rounded-xl bg-success/10 text-success"><CheckCircle2 className="w-6 h-6" /></div>
-                        주요 개발 완료 항목
+                        최근 주요 개발 완료 항목
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-muted/30 border border-border/40 rounded-2xl p-6 hover:bg-muted/50 transition-colors">
-                            <h4 className="text-lg font-bold mb-2 flex items-center gap-2"><Layers className="w-5 h-5 text-blue-500" /> 소셜 로그인 모듈 고도화</h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed">카카오, 네이버, 구글 로그인을 최신 보안 규격인 OAuth 2.1에 맞춰 업데이트했습니다. 로그인 속도가 평균 0.3초 단축되었습니다.</p>
+                    {recentDoneFeatures.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {recentDoneFeatures.map((f, i) => (
+                                <div key={f.id} className="bg-muted/30 border border-border/40 rounded-2xl p-6 hover:bg-muted/50 transition-colors">
+                                    <h4 className="text-lg font-bold mb-2 flex items-center gap-2"><Layers className={`w-5 h-5 ${i===0 ? 'text-blue-500':'text-purple-500'}`} /> {f.name}</h4>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">{f.description || f.clientDescription || "기능 구현이 완료되었습니다."}</p>
+                                </div>
+                            ))}
                         </div>
-                        <div className="bg-muted/30 border border-border/40 rounded-2xl p-6 hover:bg-muted/50 transition-colors">
-                            <h4 className="text-lg font-bold mb-2 flex items-center gap-2"><Server className="w-5 h-5 text-purple-500" /> 대시보드 API 최적화</h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed">발주사 대시보드에 접근할 때 렌더링 속도가 느려지던 데이터 병목 구간을 해결했습니다. (로딩 속도 40% 향상)</p>
+                    ) : (
+                        <div className="flex flex-col justify-center items-center py-6">
+                            <p className="text-sm text-muted-foreground">아직 완료 단계로 보고된 핵심 기능이 없습니다. 개발 중입니다.</p>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Section 1.5: Launch-Readiness Matrix */}
@@ -217,19 +252,18 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
                 <div className="bg-background/60 backdrop-blur-2xl border border-border/50 rounded-[2rem] p-8 lg:p-10 shadow-sm">
                     <h3 className="text-2xl font-bold flex items-center gap-3 mb-6">
                         <div className="p-2 rounded-xl bg-primary/10 text-primary"><CalendarRange className="w-6 h-6" /></div>
-                        다음 주 목표 (Next Sprint)
+                        다음 차례 핵심 목표 (Next Sprint)
                     </h3>
-                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-[19px] before:h-full before:w-0.5 before:bg-gradient-to-b before:from-border before:via-border/50 before:to-transparent">
-                        <div className="relative pl-12">
-                            <div className="absolute left-0 top-1 w-10 h-10 rounded-full bg-background border-2 border-border flex items-center justify-center font-black text-muted-foreground shadow-sm">1</div>
-                            <h4 className="text-lg font-bold mb-1">PG(결제 게이트웨이) 연동 테스트</h4>
-                            <p className="text-sm text-muted-foreground">토스페이먼츠 샌드박스 환경에서 모의 결제 테스트를 진행합니다.</p>
-                        </div>
-                        <div className="relative pl-12 pt-4">
-                            <div className="absolute left-0 top-5 w-10 h-10 rounded-full bg-background border-2 border-border flex items-center justify-center font-black text-muted-foreground shadow-sm">2</div>
-                            <h4 className="text-lg font-bold mb-1">QA(품질 관리) 스테이징 서버 구축</h4>
-                            <p className="text-sm text-muted-foreground">발주사가 직접 접속해서 테스트할 수 있는 임시 서버(Staging)를 배포합니다.</p>
-                        </div>
+                    <div className={`${nextTargets.length > 0 ? "space-y-4 relative before:absolute before:inset-0 before:ml-[19px] before:h-full before:w-0.5 before:bg-gradient-to-b before:from-border before:via-border/50 before:to-transparent" : "py-4 text-center"}`}>
+                        {nextTargets.length > 0 ? nextTargets.map((f, i) => (
+                            <div key={f.id} className={`relative pl-12 ${i > 0 ? "pt-4" : ""}`}>
+                                <div className="absolute left-0 top-1 w-10 h-10 rounded-full bg-background border-2 border-border flex items-center justify-center font-black text-muted-foreground shadow-sm">{i + 1}</div>
+                                <h4 className="text-lg font-bold mb-1">{f.name}</h4>
+                                <p className="text-sm text-muted-foreground">{f.description || f.clientDescription || "해당 기능의 구조 및 상세 구현 작업을 시작합니다."}</p>
+                            </div>
+                        )) : (
+                            <p className="text-sm text-muted-foreground">현재 새롭게 준비 중인 다음 스프린트 태스크가 없습니다.</p>
+                        )}
                     </div>
                 </div>
             </div>

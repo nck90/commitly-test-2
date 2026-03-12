@@ -14,13 +14,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const body = await req.json();
         const { email } = body;
 
-        const developer = await prisma.user.findUnique({ where: { email } });
+        let developer = await prisma.user.findUnique({ where: { email } });
         
         if (!developer) {
-            return NextResponse.json({ error: "가입된 사용자를 찾을 수 없습니다." }, { status: 404 });
-        }
-
-        if (developer.role !== "developer") {
+            // Create a shell user for the invited developer
+            developer = await prisma.user.create({
+                data: {
+                    email,
+                    role: "developer"
+                }
+            });
+        } else if (developer.role !== "developer" && developer.role !== null) {
             return NextResponse.json({ error: "해당 사용자는 개발자(파트너) 계정이 아닙니다." }, { status: 400 });
         }
 

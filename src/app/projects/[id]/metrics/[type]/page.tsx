@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { ArrowLeft, Target, Layers, Scale, Clock, CheckCircle2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { detectRisks } from "@/lib/riskEngine";
 
 export default async function MetricsDetailPage({ params }: { params: Promise<{ id: string, type: string }> }) {
     const { id, type } = await params;
@@ -16,6 +17,30 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
 
     if (!project) notFound();
 
+    // Fetch actual data
+    const features = await prisma.feature.findMany({
+        where: { projectId: id },
+        orderBy: { updatedAt: 'desc' }
+    });
+
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const completedFeatures = features.filter(f => f.status === 'done' && f.updatedAt >= oneWeekAgo);
+
+    const pendingDecisions = await prisma.decision.findMany({
+        where: { projectId: id, status: 'pending' },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    const dbRisks = await prisma.risk.findMany({
+        where: { projectId: id, status: 'open' },
+        orderBy: { createdAt: 'desc' }
+    });
+    
+    // Auto-detected risks from the AI engine
+    const engineRisks = await detectRisks(id);
+    const risks = [...dbRisks, ...engineRisks];
+
     const getMetricsData = () => {
         switch (type) {
             case 'progress':
@@ -24,12 +49,12 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                     icon: <Target className="w-8 h-8 text-primary" />,
                     bg: "bg-primary/5",
                     color: "text-primary",
-                    items: [
-                        { title: "시장 통합 인증 모듈", status: "완료", date: "어제", percentage: 100 },
-                        { title: "프론트엔드 라우팅 설계", status: "완료", date: "2일 전", percentage: 100 },
-                        { title: "결제 게이트웨이 연동", status: "진행중", date: "오늘", percentage: 60 },
-                        { title: "마이페이지 대시보드", status: "시작 전", date: "예정", percentage: 20 }
-                    ]
+                    items: features.length > 0 ? features.map(f => ({
+                        title: f.name,
+                        status: f.status === 'done' ? '완료' : f.status === 'in-progress' ? '진행중' : '시작 전',
+                        date: f.updatedAt.toLocaleDateString(),
+                        percentage: f.progressPercentage
+                    })) : []
                 };
             case 'features':
                 return {
@@ -37,11 +62,12 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                     icon: <Layers className="w-8 h-8 text-success" />,
                     bg: "bg-success/5",
                     color: "text-success",
-                    items: [
-                        { title: "소셜 로그인 (Kakao/Naver)", status: "QA 완료", date: "3/10", percentage: 100 },
-                        { title: "포인트 적립 스케줄러", status: "배포됨", date: "3/08", percentage: 100 },
-                        { title: "이메일 템플릿 세팅", status: "완료", date: "3/05", percentage: 100 }
-                    ]
+                    items: completedFeatures.length > 0 ? completedFeatures.map(f => ({
+                        title: f.name,
+                        status: "완료",
+                        date: f.updatedAt.toLocaleDateString(),
+                        percentage: 100
+                    })) : []
                 };
             case 'pending':
                 return {
@@ -49,10 +75,12 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                     icon: <Scale className="w-8 h-8 text-warning" />,
                     bg: "bg-warning/5",
                     color: "text-warning",
-                    items: [
-                        { title: "디자인 테마 최종 승인", status: "결정 대기", date: "2시간 전", percentage: 0 },
-                        { title: "결제 모듈 이용약관", status: "내부 검토", date: "어제", percentage: 0 }
-                    ]
+                    items: pendingDecisions.length > 0 ? pendingDecisions.map(d => ({
+                        title: d.title,
+                        status: "결정 대기",
+                        date: d.createdAt.toLocaleDateString(),
+                        percentage: 0
+                    })) : []
                 };
             case 'risk':
                 return {
@@ -60,10 +88,12 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                     icon: <ShieldAlert className="w-8 h-8 text-destructive" />,
                     bg: "bg-destructive/5",
                     color: "text-destructive",
-                    items: [
-                        { title: "결제 게이트웨이 연동 지연 우려", status: "위험", date: "최근 감지", percentage: 0 },
-                        { title: "미응답 피드백 누적", status: "경고", date: "48시간 경과", percentage: 0 }
-                    ]
+                    items: risks.length > 0 ? risks.map(r => ({
+                        title: r.title,
+                        status: r.severity === 'high' ? '위험' : '경고',
+                        date: (r as any).createdAt instanceof Date ? (r as any).createdAt.toLocaleDateString() : (new Date((r as any).createdAt)).toLocaleDateString(),
+                        percentage: 0
+                    })) : []
                 };
             default: return null;
         }
@@ -101,7 +131,14 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                 </div>
 
                 <div className="divide-y divide-border/30">
-                    {data.items.map((item, i) => (
+                    {data.items.length === 0 ? (
+                        <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                            <CheckCircle2 className="w-12 h-12 text-muted-foreground/30 mb-4" />
+                            <h3 className="text-lg font-bold mb-1">항목이 없습니다</h3>
+                            <p className="text-sm">현재 조건에 해당하는 데이터가 존재하지 않습니다.</p>
+                        </div>
+                    ) : (
+                        data.items.map((item, i) => (
                         <div key={i} className="p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:bg-muted/10 transition-colors">
                             <div className="flex items-center gap-4 flex-1">
                                 <div className={`p-3 rounded-2xl flex items-center justify-center shrink-0 ${item.percentage === 100 ? 'bg-success/10 text-success' :
@@ -141,7 +178,7 @@ export default async function MetricsDetailPage({ params }: { params: Promise<{ 
                                 </Link>
                             )}
                         </div>
-                    ))}
+                    )))}
                 </div>
             </div>
         </div>

@@ -14,26 +14,37 @@ export async function POST(req: Request) {
             });
         }
 
-        const existingUser = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { email },
         });
 
-        if (existingUser) {
-            return new Response(JSON.stringify({ error: "Email already exists" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-            });
-        }
-
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = await prisma.user.create({
-            data: {
-                email,
-                name: name || email.split("@")[0],
-                password: hashedPassword,
-            },
-        });
+        if (user) {
+            // If the user exists but has no password, it's a shell account created via invite
+            if (!user.password) {
+                user = await prisma.user.update({
+                    where: { email },
+                    data: {
+                        name: name || email.split("@")[0],
+                        password: hashedPassword,
+                    },
+                });
+            } else {
+                return new Response(JSON.stringify({ error: "Email already exists" }), {
+                    status: 400,
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+        } else {
+            user = await prisma.user.create({
+                data: {
+                    email,
+                    name: name || email.split("@")[0],
+                    password: hashedPassword,
+                },
+            });
+        }
 
         return new Response(JSON.stringify({ 
             user: {

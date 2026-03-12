@@ -64,42 +64,48 @@ export default function DocumentDetailClient({ projectId, file }: { projectId: s
 
                     <div className="flex-1 bg-muted/30 rounded-2xl border border-border/50 flex flex-col items-center justify-center relative overflow-hidden group">
                         <div className="absolute inset-0 bg-background/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4 z-10">
-                            <p className="text-sm font-bold bg-background px-4 py-2 rounded-full border border-border/50 shadow-sm">
-                                미리보기 지원 준비 중
-                            </p>
+                            {!file.url && (
+                                <p className="text-sm font-bold bg-background px-4 py-2 rounded-full border border-border/50 shadow-sm">
+                                    미리보기 지원 준비 중
+                                </p>
+                            )}
                             <button
                                 onClick={handleDownload}
-                                disabled={isDownloading}
-                                className={`px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:bg-primary/90 flex items-center gap-2 active:scale-95 transition-all ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={isDownloading || !file.url}
+                                className={`px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:bg-primary/90 flex items-center gap-2 active:scale-95 transition-all ${(isDownloading || !file.url) ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
-                                <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} /> 원본 화질 다운로드
+                                <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} /> {file.url ? '원본 화질 다운로드' : '다운로드 불가'}
                             </button>
                         </div>
 
-                        {/* Mock Preview Content */}
-                        <div className="w-full h-full p-8 opacity-60 flex flex-col items-center justify-center">
-                            {file.type === 'pdf' ? (
-                                <div className="w-full max-w-sm h-full bg-background border border-border rounded shadow flex flex-col items-center pt-10">
-                                    <div className="w-2/3 h-4 bg-muted mb-4 rounded" />
-                                    <div className="w-5/6 h-2 bg-muted/50 mb-2 rounded" />
-                                    <div className="w-5/6 h-2 bg-muted/50 mb-2 rounded" />
-                                    <div className="w-4/6 h-2 bg-muted/50 rounded" />
-                                </div>
-                            ) : file.type === 'img' ? (
-                                <div className="w-full max-w-md aspect-video bg-background border border-border rounded shadow-inner flex items-center justify-center">
-                                    <ImageIcon className="w-16 h-16 text-muted-foreground/30" />
-                                </div>
-                            ) : (
-                                <div className="w-full max-w-sm h-full bg-background border border-border rounded shadow flex flex-col items-start p-8">
-                                    <div className="w-1/2 h-6 bg-muted mb-6 rounded" />
-                                    <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
-                                    <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
-                                    <div className="w-3/4 h-2 bg-muted/50 mb-8 rounded" />
-                                    <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
-                                    <div className="w-5/6 h-2 bg-muted/50 rounded" />
-                                </div>
-                            )}
-                        </div>
+                        {/* Mock Preview Content OR Actual iframe */}
+                        {file.url ? (
+                            <iframe src={file.url} className="w-full h-full border-0 absolute inset-0 z-0 bg-white" title={file.name} />
+                        ) : (
+                            <div className="w-full h-full p-8 opacity-60 flex flex-col items-center justify-center relative z-0">
+                                {file.type === 'pdf' ? (
+                                    <div className="w-full max-w-sm h-full bg-background border border-border rounded shadow flex flex-col items-center pt-10">
+                                        <div className="w-2/3 h-4 bg-muted mb-4 rounded" />
+                                        <div className="w-5/6 h-2 bg-muted/50 mb-2 rounded" />
+                                        <div className="w-5/6 h-2 bg-muted/50 mb-2 rounded" />
+                                        <div className="w-4/6 h-2 bg-muted/50 rounded" />
+                                    </div>
+                                ) : file.type === 'img' ? (
+                                    <div className="w-full max-w-md aspect-video bg-background border border-border rounded shadow-inner flex items-center justify-center">
+                                        <ImageIcon className="w-16 h-16 text-muted-foreground/30" />
+                                    </div>
+                                ) : (
+                                    <div className="w-full max-w-sm h-full bg-background border border-border rounded shadow flex flex-col items-start p-8">
+                                        <div className="w-1/2 h-6 bg-muted mb-6 rounded" />
+                                        <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
+                                        <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
+                                        <div className="w-3/4 h-2 bg-muted/50 mb-8 rounded" />
+                                        <div className="w-full h-2 bg-muted/50 mb-3 rounded" />
+                                        <div className="w-5/6 h-2 bg-muted/50 rounded" />
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

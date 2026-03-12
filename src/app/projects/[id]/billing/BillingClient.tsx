@@ -6,11 +6,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useParams } from "next/navigation";
 
-const DEFAULT_MILESTONES = [
-    { id: 1, title: "계약금 (선금)", amount: 10000000, date: "2024-02-15", status: "paid", desc: "프로젝트 착수 및 기본 기획 완료", paidAt: "2024-02-15T10:30:00" },
-    { id: 2, title: "1차 중도금", amount: 10000000, date: "2024-03-10", status: "pending", desc: "프론트엔드 및 백엔드 주요 기능 구현", paidAt: null },
-    { id: 3, title: "잔금", amount: 10000000, date: "2024-04-05", status: "upcoming", desc: "최종 테스트 및 서비스 정식 배포", paidAt: null },
-];
 
 // 에스크로 파이프라인 단계 정의
 const ESCROW_STEPS = [
@@ -28,13 +23,23 @@ const PAYMENT_HISTORY = [
     { id: 4, type: "release", title: "2차 마일스톤 정산 완료", amount: 5000000, date: "2024-03-08 16:30", status: "success" },
 ];
 
-export default function BillingPage() {
+type MilestoneProgress = {
+    id: string;
+    title: string;
+    amount: number;
+    targetDate: Date | null;
+    status: string;
+    description: string | null;
+    paidAt: Date | null;
+};
+
+export default function BillingClient({ initialMilestones }: { initialMilestones: MilestoneProgress[] }) {
     const { role } = useAuth();
     const params = useParams();
     const projectId = params.id as string;
     const [isProcessing, setIsProcessing] = useState(false);
-    const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
-    const [paymentMilestones, setPaymentMilestones] = useState(DEFAULT_MILESTONES);
+    const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
+    const [paymentMilestones, setPaymentMilestones] = useState(initialMilestones || []);
     const [activeTab, setActiveTab] = useState<"schedule" | "history">("schedule");
     const [isDisputed, setIsDisputed] = useState(false);
 
@@ -72,7 +77,7 @@ export default function BillingPage() {
             await new Promise(resolve => setTimeout(resolve, 2000));
             
             const updatedMilestones = paymentMilestones.map(m => 
-                m.id === selectedMilestone ? { ...m, status: 'paid', paidAt: new Date().toISOString() } : m
+                m.id === selectedMilestone ? { ...m, status: 'paid', paidAt: new Date() } : m
             );
             
             const nextUpcomingIndex = updatedMilestones.findIndex(m => m.status === 'upcoming');
@@ -93,21 +98,11 @@ export default function BillingPage() {
         }
     };
 
-    const handleDownloadReceipt = (milestone: typeof DEFAULT_MILESTONES[0]) => {
+    const handleDownloadReceipt = (milestone: MilestoneProgress) => {
         toast.success(`"${milestone.title}" 영수증이 다운로드되었어요.`, { description: "Downloads 폴더에서 확인해 주세요." });
     };
 
-    if (role === "developer") {
-        return (
-            <div className="max-w-5xl mx-auto py-8 px-4 h-full flex flex-col items-center justify-center min-h-[60vh] text-center">
-                <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-6 max-w-sm mx-auto">
-                    <Lock className="w-10 h-10 text-muted-foreground" />
-                </div>
-                <h1 className="text-2xl font-bold mb-2">결제 및 예산 정보는 고객님 전용이에요</h1>
-                <p className="text-muted-foreground max-w-md mx-auto">개발팀 권한으로는 결제 내역을 확인할 수 없어요. 열람이 필요하시면 프로젝트 관리자(PM)에게 요청해 주세요.</p>
-            </div>
-        );
-    }
+    // Developer View Blocks are removed to allow Two-Way flow
 
     const totalBudget = 33000000;
     const paidAmount = paymentMilestones.filter(m => m.status === 'paid').reduce((sum, m) => sum + m.amount, 0);
@@ -239,7 +234,7 @@ export default function BillingPage() {
                                             </div>
                                             <div>
                                                 <h3 className={`font-bold text-base ${m.status === 'pending' ? 'text-warning' : ''}`}>{m.title}</h3>
-                                                <p className="text-xs text-muted-foreground">{m.desc}</p>
+                                                <p className="text-xs text-muted-foreground">{m.description || ""}</p>
                                             </div>
                                         </div>
                                         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg shrink-0
@@ -254,7 +249,7 @@ export default function BillingPage() {
                                         <p className="text-2xl font-black">₩{m.amount.toLocaleString()}</p>
                                         <div className="flex items-center gap-2">
                                             <p className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {new Date(m.date).toLocaleDateString('ko-KR')}
+                                                <Clock className="w-3 h-3" /> {m.targetDate ? new Date(m.targetDate).toLocaleDateString('ko-KR') : '일정 미정'}
                                             </p>
                                             {m.status === 'paid' && (
                                                 <button 
@@ -266,10 +261,31 @@ export default function BillingPage() {
                                             )}
                                         </div>
                                     </div>
-                                    {m.status === 'pending' && (
+                                    {role === 'client' && m.status === 'pending' && (
                                         <button className="mt-4 w-full py-2.5 bg-warning text-warning-foreground text-sm font-bold rounded-xl hover:bg-warning/90 transition-colors shadow-sm flex items-center justify-center gap-2">
-                                            결제 진행하기 <ArrowRight className="w-4 h-4" />
+                                            승인 및 결제 진행하기 <ArrowRight className="w-4 h-4" />
                                         </button>
+                                    )}
+                                    {role === 'developer' && m.status === 'upcoming' && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const updatedMilestones = paymentMilestones.map(milestone => 
+                                                    milestone.id === m.id ? { ...milestone, status: 'pending' } : milestone
+                                                );
+                                                setPaymentMilestones(updatedMilestones);
+                                                localStorage.setItem(`commitly_milestones_${projectId}`, JSON.stringify(updatedMilestones));
+                                                toast.success("클라이언트에게 대금 지급을 청구했습니다.");
+                                            }}
+                                            className="mt-4 w-full py-2.5 bg-primary/10 text-primary border border-primary/20 text-sm font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all shadow-sm flex items-center justify-center gap-2"
+                                        >
+                                            대금 정산 청구하기 <ArrowRight className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    {role === 'developer' && m.status === 'pending' && (
+                                        <p className="mt-4 w-full py-2 flex items-center justify-center text-xs font-bold text-muted-foreground">
+                                            클라이언트의 결제(승인)를 대기 중입니다.
+                                        </p>
                                     )}
                                 </div>
                             ))}
@@ -277,7 +293,7 @@ export default function BillingPage() {
                     </div>
 
                     {/* Secure Checkout Frame */}
-                    {selectedMilestone ? (
+                    {role === 'client' && selectedMilestone ? (
                         <div className="bg-background/80 backdrop-blur-xl border border-primary/30 rounded-3xl p-6 lg:p-8 shadow-lg ring-1 ring-primary/10 animate-in fade-in slide-in-from-bottom-8">
                             <div className="flex items-center justify-center mb-6">
                                 <div className="px-4 py-1.5 rounded-full bg-success/10 text-success text-xs font-bold flex items-center gap-2 border border-success/20">

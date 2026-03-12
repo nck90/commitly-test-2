@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { notificationService } from "@/lib/notifications";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -18,11 +19,10 @@ export async function POST(req: Request) {
 
     try {
         let reply;
+        let projectId = "";
+        let projectName = "";
+
         if (targetType === "update") {
-            // For updates, we often create a Confirmation if it's from a client, 
-            // or just a Reply linked to some parent if we supported nesting.
-            // But the schema has Confirmation linked to Update, and Reply linked to Confirmation/Decision/Risk.
-            // Let's assume InteractiveReplyForm for "updates" creates a Confirmation with action "question"
             reply = await prisma.confirmation.create({
                 data: {
                     updateId: targetId,
@@ -31,6 +31,9 @@ export async function POST(req: Request) {
                     comment: content,
                 }
             });
+            const parent = await prisma.update.findUnique({ where: { id: targetId }, include: { project: true } });
+            if (parent?.project) { projectId = parent.project.id; projectName = parent.project.name; }
+
         } else if (targetType === "decision") {
             reply = await prisma.reply.create({
                 data: {
@@ -39,6 +42,9 @@ export async function POST(req: Request) {
                     content: content,
                 }
             });
+            const parent = await prisma.decision.findUnique({ where: { id: targetId }, include: { project: true } });
+            if (parent?.project) { projectId = parent.project.id; projectName = parent.project.name; }
+
         } else if (targetType === "risk") {
             reply = await prisma.reply.create({
                 data: {
@@ -47,8 +53,23 @@ export async function POST(req: Request) {
                     content: content,
                 }
             });
+            const parent = await prisma.risk.findUnique({ where: { id: targetId }, include: { project: true } });
+            if (parent?.project) { projectId = parent.project.id; projectName = parent.project.name; }
+
         } else {
             return NextResponse.json({ error: "Invalid target type" }, { status: 400 });
+        }
+
+        const actor = await prisma.user.findUnique({ where: { id: userId } });
+        if (actor && projectId) {
+            await notificationService.dispatchNotification({
+                projectId,
+                projectName,
+                actorName: actor.name || actor.email || 'Unknown User',
+                actionType: 'COMMENTED',
+                detail: content,
+                link: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/projects/${projectId}/feed`
+            });
         }
 
         return NextResponse.json(reply);

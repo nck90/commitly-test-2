@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { notificationService } from "@/lib/notifications";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -24,6 +25,8 @@ export async function POST(req: Request) {
 
     try {
         let entry;
+        let actionType: 'UPDATED' | 'DECISION_REQUESTED' = 'UPDATED';
+
         if (type === "decision") {
             entry = await prisma.decision.create({
                 data: {
@@ -35,6 +38,7 @@ export async function POST(req: Request) {
                     status: "pending",
                 }
             });
+            actionType = 'DECISION_REQUESTED';
         } else if (type === "risk") {
             entry = await prisma.risk.create({
                 data: {
@@ -45,6 +49,7 @@ export async function POST(req: Request) {
                     status: "active",
                 }
             });
+            actionType = 'UPDATED';
         } else {
             // Default to Update
             entry = await prisma.update.create({
@@ -56,6 +61,22 @@ export async function POST(req: Request) {
                     clientSummary,
                     status: "new",
                 }
+            });
+            actionType = 'UPDATED';
+        }
+
+        // Fetch project and user info for the notification
+        const project = await prisma.project.findUnique({ where: { id: projectId } });
+        const actor = await prisma.user.findUnique({ where: { id: userId } });
+
+        if (project && actor) {
+            await notificationService.dispatchNotification({
+                projectId,
+                projectName: project.name,
+                actorName: actor.name || actor.email || 'Unknown User',
+                actionType,
+                detail: title,
+                link: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/projects/${projectId}/feed`
             });
         }
 

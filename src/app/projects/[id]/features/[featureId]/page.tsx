@@ -9,7 +9,8 @@ export default async function FeatureDetailPage({ params }: { params: Promise<{ 
     const { id, featureId } = await params;
 
     const project = await prisma.project.findUnique({
-        where: { id }
+        where: { id },
+        include: { scopeDocs: true }
     });
 
     const feature = await prisma.feature.findUnique({

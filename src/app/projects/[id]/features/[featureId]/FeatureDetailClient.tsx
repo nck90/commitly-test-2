@@ -1,15 +1,21 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, FileText, AlertCircle, Calendar, CheckSquare, GitCommit, Link as LinkIcon, Paperclip, CheckCircle2, Circle, MoreHorizontal, User, Clock, MessagesSquare, Activity, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, Calendar, CheckSquare, GitCommit, Link as LinkIcon, Paperclip, CheckCircle2, Circle, MoreHorizontal, User, Clock, MessagesSquare, Activity, Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export function FeatureDetailClient({ project, feature }: { project: any, feature: any }) {
     const { role } = useAuth();
     const [progress, setProgress] = useState(feature.progressPercentage || 0);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Description state
+    const [description, setDescription] = useState(feature.description || feature.clientDescription || "");
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Checklist state
     const [checklists, setChecklists] = useState<any[]>(feature.checklists || []);
@@ -48,6 +54,24 @@ export function FeatureDetailClient({ project, feature }: { project: any, featur
             toast.error(e.message);
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleGenerateDescription = async () => {
+        setIsGenerating(true);
+        try {
+            const res = await fetch(`/api/features/${feature.id}/generate-description`, {
+                method: "POST"
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "상세 설명 생성에 실패했습니다");
+            
+            setDescription(data.description);
+            toast.success("AI가 상세 설명을 성공적으로 장성했습니다!");
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -199,14 +223,45 @@ export function FeatureDetailClient({ project, feature }: { project: any, featur
                         <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
                             <FileText className="w-5 h-5 text-primary" /> 기능 상세 설명 및 기대 효과
                         </h2>
-                        <div className="bg-background border border-border/50 rounded-3xl p-8 shadow-sm prose prose-sm dark:prose-invert max-w-none text-foreground/90 leading-loose text-[15px]">
-                            {feature.description || feature.clientDescription ? (
-                                <p className="whitespace-pre-wrap">{feature.description || feature.clientDescription}</p>
+                        <div className="bg-background border border-border/50 rounded-3xl p-8 shadow-sm max-w-none">
+                            {description ? (
+                                <ReactMarkdown 
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                        h3: ({node, ...props}) => <h3 className="text-xl font-extrabold text-foreground mt-10 mb-5 border-b border-border/40 pb-3" {...props} />,
+                                        h4: ({node, ...props}) => <h4 className="text-lg font-bold text-foreground mt-8 mb-4" {...props} />,
+                                        p: ({node, ...props}) => <p className="text-muted-foreground leading-[1.8] mb-6 text-[15.5px] tracking-tight" {...props} />,
+                                        ul: ({node, ...props}) => <ul className="space-y-3 mb-8 pl-1" {...props} />,
+                                        li: ({node, ...props}) => (
+                                            <li className="flex items-start gap-3 text-[15.5px] text-muted-foreground group leading-[1.8] tracking-tight">
+                                                <span className="mt-2.5 w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors flex-shrink-0" />
+                                                <span className="flex-1">{props.children}</span>
+                                            </li>
+                                        ),
+                                        ol: ({node, ...props}) => <ol className="list-decimal list-outside pl-5 space-y-3 mb-8 text-muted-foreground text-[15.5px] leading-[1.8] tracking-tight" {...props} />,
+                                        strong: ({node, ...props}) => <strong className="font-semibold text-foreground bg-primary/5 px-1.5 py-0.5 rounded-md" {...props} />,
+                                    }}
+                                >
+                                    {description.replace(/^```markdown\n?/i, "").replace(/\n?```$/i, "").trim()}
+                                </ReactMarkdown>
                             ) : (
-                                <div className="text-muted-foreground italic flex flex-col items-center justify-center py-6 opacity-80">
-                                    <FileText className="w-10 h-10 mb-3 text-muted-foreground/50" />
-                                    <p>아직 상세 설명이 등록되지 않았습니다.</p>
-                                    <p className="text-xs mt-1">기획 단계가 완료되면 이 항목이 채워집니다.</p>
+                                <div className="text-muted-foreground italic flex flex-col items-center justify-center py-6 opacity-80 space-y-4">
+                                    <FileText className="w-10 h-10 mb-1 text-muted-foreground/50" />
+                                    <div className="text-center">
+                                        <p>아직 상세 설명이 등록되지 않았습니다.</p>
+                                        <p className="text-xs mt-1">프로젝트 기획 문서를 토대로 AI에게 작성을 맡겨보세요.</p>
+                                    </div>
+                                    <button 
+                                        onClick={handleGenerateDescription}
+                                        disabled={isGenerating}
+                                        className="mt-4 flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 px-4 py-2 rounded-xl transition-all font-bold disabled:opacity-50"
+                                    >
+                                        {isGenerating ? (
+                                            <><Loader2 className="w-4 h-4 animate-spin" /> 생성 중...</>
+                                        ) : (
+                                            <><Sparkles className="w-4 h-4" /> AI로 상세 설명 자동 완성하기</>
+                                        )}
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -396,20 +451,26 @@ export function FeatureDetailClient({ project, feature }: { project: any, featur
                         <h3 className="font-bold flex items-center gap-2 mb-5 text-[15px]">
                             <Paperclip className="w-4 h-4 text-primary" /> 관련 기획 및 디자인 문서
                         </h3>
-                        <div className="space-y-3">
-                            <a href="#" className="flex items-center justify-between p-3.5 rounded-2xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors group shadow-sm bg-muted/20">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className="w-8 h-8 rounded-lg bg-pink-500/10 text-pink-500 flex items-center justify-center shrink-0 text-xs font-black">Fig</div>
-                                    <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">최종 화면 UI 디자인 시안</span>
-                                </div>
-                            </a>
-                            <a href="#" className="flex items-center justify-between p-3.5 rounded-2xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors group shadow-sm bg-muted/20">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0 text-xs font-black">PDF</div>
-                                    <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">기능 상세 명세서 (기획안)</span>
-                                </div>
-                            </a>
-                        </div>
+                        {(!project.scopeDocs || project.scopeDocs.length === 0) ? (
+                            <div className="text-center py-8 border border-dashed border-border/50 rounded-2xl bg-muted/10">
+                                <p className="text-sm text-muted-foreground">등록된 관련 문서가 없습니다.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {project.scopeDocs.map((doc: any) => (
+                                    <a key={doc.id} href={doc.contentUrl || "#"} target={doc.contentUrl ? "_blank" : "_self"} rel="noopener noreferrer" className="flex items-center justify-between p-3.5 rounded-2xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors group shadow-sm bg-muted/20">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-black
+                                                ${doc.type === 'design' ? 'bg-pink-500/10 text-pink-500' : 
+                                                  doc.type === 'spec' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
+                                                {doc.type === 'design' ? 'Fig' : doc.type === 'spec' ? 'PDF' : 'Doc'}
+                                            </div>
+                                            <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">{doc.title}</span>
+                                        </div>
+                                    </a>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Activity / Git Log */}

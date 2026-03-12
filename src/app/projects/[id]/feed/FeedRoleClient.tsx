@@ -1,10 +1,13 @@
 "use client";
 
-import { useAuth } from "@/contexts/AuthContext";
-import { RefreshCw, Scale, AlertTriangle, MessageSquare, CheckCircle, Clock, ArrowRight, FileEdit, Code2, ShieldCheck, Bell, Send, ThumbsUp, ThumbsDown, Eye, HelpCircle, Megaphone, Pin, PinOff } from "lucide-react";
-import { ApprovalActions, InteractiveReplyForm } from "./FeedClient";
+import { useEffect, useState } from "react";
+import { generateSuggestedReplies } from "@/app/actions/aiReplies";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useState } from "react";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { RefreshCw, Scale, AlertTriangle, MessageSquare, CheckCircle, Clock, ArrowRight, FileEdit, Code2, ShieldCheck, Bell, Send, ThumbsUp, ThumbsDown, Eye, HelpCircle, Megaphone, Pin, PinOff, Sparkles } from "lucide-react";
+import { ApprovalActions, InteractiveReplyForm } from "./FeedClient";
 
 interface FeedItem {
     id: string;
@@ -20,6 +23,7 @@ interface FeedItem {
     confirmations?: any[];
     replies?: any[];
     options?: any[];
+    content?: string | null; // Added content to FeedItem interface
     [key: string]: any;
 }
 
@@ -353,6 +357,37 @@ function ClientFeedView({ feedItems, projectId }: { feedItems: FeedItem[]; proje
 //  CLIENT FEED CARD — Simplified, non-technical
 // ═══════════════════════════════════════════════
 function ClientFeedCard({ item, projectId, onConfirm, onTogglePin, isPinned }: { item: FeedItem; projectId: string; onConfirm?: () => void; onTogglePin?: () => void; isPinned?: boolean }) {
+    const [showAiSummary, setShowAiSummary] = useState(false);
+    const router = useRouter();
+
+    const isCheckType = item._feedType === 'decision' || item._feedType === 'risk';
+    const isUrgent = item._feedType === 'risk';
+
+    // AI Suggestions State
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+    useEffect(() => {
+        // Fetch AI suggestions only for actionable feed items (decisions or risks) that are pending
+        if (isCheckType && item.status === 'pending') {
+            const fetchSuggestions = async () => {
+                setLoadingSuggestions(true);
+                try {
+                    const ctx = item.content || item.clientSummary || item.title;
+                    const result = await generateSuggestedReplies(ctx, true);
+                    setSuggestions(result);
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setLoadingSuggestions(false);
+                }
+            };
+            fetchSuggestions();
+        }
+    }, [item.status, isCheckType, item.content, item.clientSummary, item.title]);
+
+    // Format content with newlines
+    const descriptionLines = (item.content || '').split('\n').filter((l: string) => l.trim().length > 0);
     const isPending = (item._feedType === 'update' && item.status === 'new') || 
                       (item._feedType === 'decision' && item.status === 'pending') || 
                       (item._feedType === 'risk' && item.status === 'active');
@@ -399,6 +434,49 @@ function ClientFeedCard({ item, projectId, onConfirm, onTogglePin, isPinned }: {
                             <span className="text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs font-bold self-start border border-primary/20 shrink-0">요약</span>
                             <span className="text-foreground">{item.clientSummary || '아직 요약이 준비되지 않았어요.'}</span>
                         </div>
+                        {loadingSuggestions ? (
+                            <div className="flex gap-2">
+                                <div className="h-7 w-24 bg-primary/20 rounded-lg animate-pulse" />
+                                <div className="h-7 w-32 bg-primary/20 rounded-lg animate-pulse" />
+                            </div>
+                        ) : suggestions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {suggestions.map((suggestion, idx) => (
+                                    <button 
+                                        key={idx}
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            toast.loading("의견을 등록하는 중...");
+                                            try {
+                                                const res = await fetch('/api/activities/confirm', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ 
+                                                        targetId: item.id, 
+                                                        targetType: item._feedType, 
+                                                        action: 'approved', 
+                                                        comment: suggestion 
+                                                    })
+                                                });
+                                                if (res.ok) {
+                                                    toast.dismiss();
+                                                    toast.success("의견이 잘 전달되었어요!");
+                                                    if (onConfirm) onConfirm();
+                                                    router.refresh();
+                                                }
+                                            } catch (err) {
+                                                toast.dismiss();
+                                                toast.error("오류가 발생했습니다.");
+                                            }
+                                        }}
+                                        className="text-[11px] px-3 py-1.5 bg-background border border-primary/20 rounded-lg text-foreground cursor-pointer hover:bg-primary/10 transition-colors text-left truncate max-w-[250px]"
+                                        title={suggestion}
+                                    >
+                                        &quot;{suggestion}&quot;
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
                 ) : item._feedType === 'decision' ? (
                     <div className="space-y-3">

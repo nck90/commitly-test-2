@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import BillingClient from "./BillingClient";
 import { notFound } from "next/navigation";
-import { Lock, Wallet } from "lucide-react";
+import { Lock, Wallet, ListChecks } from "lucide-react";
 
 
 export default async function BillingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -9,19 +9,26 @@ export default async function BillingPage({ params }: { params: Promise<{ id: st
     
     const project = await prisma.project.findUnique({
         where: { id },
-        include: { features: true }
+        include: { 
+            features: true,
+            milestones: { orderBy: { sortOrder: 'asc' } }
+        }
     });
 
     if (!project) notFound();
 
-    if (project.features.length === 0) {
+    // 마일스톤에 금액 정보가 있는 것만 결제 관련으로 간주
+    const paymentMilestones = project.milestones.filter((m: any) => m.amount > 0);
+
+    // 결제 관련 마일스톤이 없으면 기능 리스트만 표시
+    if (paymentMilestones.length === 0) {
         return (
             <div className="max-w-6xl mx-auto py-8 px-4 space-y-10">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-2 mb-3">
                             <span className="px-3 py-1.5 rounded-xl bg-orange-500/10 text-orange-600 text-xs font-bold flex items-center gap-2 border border-orange-500/20 backdrop-blur-md">
-                                <Wallet className="w-3.5 h-3.5" /> 결제 및 예산 관리
+                                <Wallet className="w-3.5 h-3.5" /> 요금 및 결제
                             </span>
                         </div>
                         <h1 className="text-4xl font-extrabold tracking-tight text-foreground/90">프로젝트 예산 현황</h1>
@@ -36,12 +43,30 @@ export default async function BillingPage({ params }: { params: Promise<{ id: st
                     </div>
                     <h2 className="text-3xl font-bold mb-4">아직 결제 단계가 아닙니다</h2>
                     <p className="text-muted-foreground text-lg max-w-lg mx-auto leading-relaxed">
-                        파트너 개발사가 프로젝트의 초기 기획과 요구사항을 분석 중입니다. 첫 번째 마일스톤이 확정되면, 스케줄에 따른 안전 결제 시스템(에스크로)이 활성화됩니다.
+                        결제 마일스톤이 설정되면 스케줄에 따른 안전 결제 시스템(에스크로)이 활성화됩니다.
                     </p>
+
+                    {/* 기능 리스트만 간략하게 표시 */}
+                    {project.features.length > 0 && (
+                        <div className="mt-10 w-full max-w-md text-left">
+                            <h3 className="text-sm font-bold text-muted-foreground mb-3 flex items-center gap-2">
+                                <ListChecks className="w-4 h-4" /> 진행 중인 기능 목록
+                            </h3>
+                            <div className="space-y-2">
+                                {project.features.map((f: any) => (
+                                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/30">
+                                        <div className={`w-2 h-2 rounded-full ${f.status === 'done' ? 'bg-success' : f.status === 'in_progress' ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+                                        <span className="text-sm font-medium">{f.name}</span>
+                                        <span className="ml-auto text-xs text-muted-foreground">{f.progressPercentage}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
     }
 
-    return <BillingClient />;
+    return <BillingClient initialMilestones={paymentMilestones} />;
 }

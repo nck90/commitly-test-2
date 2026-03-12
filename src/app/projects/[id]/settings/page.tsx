@@ -1,13 +1,33 @@
-"use client";
 
 import { SettingsIcon, Github, Bell, Shield, Key, AlertCircle, Code2, ShieldCheck, Eye, CheckCircle2, Scale } from "lucide-react";
-import { NotificationToggle, GithubSyncButton } from "./SettingsClient";
-import { useAuth } from "@/contexts/AuthContext";
+import { NotificationToggle, GithubIntegrationPanel, PartnerManagementSection } from "./SettingsClient";
+import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
+export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    
+    // Auth Check
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id;
+    
+    const project = await prisma.project.findUnique({
+        where: { id },
+        include: {
+            agency: { select: { id: true, email: true, name: true } },
+            invites: {
+                where: { status: "PENDING" },
+                include: { agency: { select: { id: true, email: true, name: true } } }
+            }
+        }
+    });
+    
+    // Determine Role
+    const isDeveloper = project?.agencyId === userId;
+    const isClient = project?.clientId === userId;
 
-export default function SettingsPage() {
-    const { role } = useAuth();
-    const isDeveloper = role === 'developer';
+    if (!project) return <div>Project not found</div>;
 
     return (
         <div className="max-w-4xl mx-auto py-8">
@@ -167,7 +187,16 @@ export default function SettingsPage() {
                     </div>
                 )}
 
-                {/* 3. DEVELOPER ONLY: GitHub Integration */}
+                {/* 3. PARTNER MANAGEMENT — Client only */}
+                {isClient && (
+                    <PartnerManagementSection 
+                        projectId={id} 
+                        agency={(project as any).agency} 
+                        invites={(project as any).invites} 
+                    />
+                )}
+
+                {/* 4. DEVELOPER ONLY: GitHub Integration */}
                 {isDeveloper && (
                     <div className="commitly-card p-6 border-l-4 border-l-primary relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12 group-hover:opacity-10">
@@ -188,46 +217,25 @@ export default function SettingsPage() {
                                 <span className="px-3 py-1 bg-gradient-to-r from-primary/20 to-primary/5 text-primary font-bold text-xs rounded-full border border-primary/20 shadow-sm">
                                     Pro Feature
                                 </span>
-                                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-success/10 border border-success/20">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                    <span className="text-[10px] font-bold text-success uppercase tracking-wider">Connected</span>
-                                </div>
+                                {project?.agencyId === userId && (project as any).githubToken ? (
+                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-success/10 border border-success/20">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                                        <span className="text-[10px] font-bold text-success uppercase tracking-wider">Connected</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted border border-border">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Disconnected</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
-
-                        <div className="space-y-5 relative z-10 bg-background/40 backdrop-blur-sm p-5 border border-border/50 rounded-2xl">
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-semibold flex items-center gap-1.5">
-                                    <Shield className="w-4 h-4 text-primary/70" /> 대상 레포지토리 (Repository URL)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="https://github.com/agency/project-repo"
-                                    defaultValue="https://github.com/commitly/trust-layer-core"
-                                    className="px-4 py-3 bg-background border border-border/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono shadow-inner text-muted-foreground cursor-not-allowed"
-                                    disabled
-                                />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-semibold flex items-center gap-1.5">
-                                    <Key className="w-4 h-4 text-primary/70" /> Personal Access Token (PAT)
-                                </label>
-                                <div className="flex gap-3">
-                                    <input
-                                        type="password"
-                                        defaultValue="github_pat_11AXYZ..."
-                                        className="flex-1 px-4 py-3 bg-background border border-border/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono shadow-inner"
-                                    />
-                                    <GithubSyncButton />
-                                </div>
-                                <div className="flex items-start gap-2 mt-2 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                                    <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                                    <p className="text-[11px] text-blue-500/80 leading-relaxed">
-                                        현재 테스트 모드로 실행 중이며, 연동 권한은 Developer Admin에게만 부여됩니다.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+ 
+                        <GithubIntegrationPanel 
+                            projectId={id} 
+                            initialRepoUrl={(project as any).githubRepoUrl} 
+                            initialToken={(project as any).githubToken} 
+                        />
                     </div>
                 )}
             </div>

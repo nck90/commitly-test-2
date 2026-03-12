@@ -55,10 +55,12 @@ model Project {
   clientId    String?
   name        String
   description String?
-  status      String   @default("active") // "active", "completed", "hold"
+  status      String   @default("active") // active, completed, archived
   startDate   DateTime?
   endDate     DateTime?
   healthScore Int      @default(100)
+  githubRepoUrl String? // Used to link GitHub Webhooks to this project
+  githubToken  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -67,11 +69,28 @@ model Project {
   client      User?     @relation("ClientProjects", fields: [clientId], references: [id])
 
   features    Feature[]
+  milestones  Milestone[]
   updates     Update[]
   decisions   Decision[]
   risks       Risk[]
   scopeDocs   ScopeDoc[]
   invites     ProjectInvite[]
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  amount      Int      @default(0)
+  status      String   @default("upcoming") // "upcoming", "pending", "paid"
+  targetDate  DateTime?
+  paidAt      DateTime?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model Feature {
