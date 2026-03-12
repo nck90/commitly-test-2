@@ -505,3 +505,5 @@ export function FeatureDetailClient({ project, feature }: { project: any, featur
         </div>
     );
 }
+
+// UI Enhancements Added
